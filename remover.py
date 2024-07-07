@@ -167,7 +167,7 @@ class GrabCut(threading.Thread):
             self.image_drawing = cv2.addWeighted(overlay, alpha, self.image_drawing, 1 - alpha, 0) 
             cv2.imshow(self.windowName, self.image_drawing)
         else:
-            print(f"\r -- Grapcut_mask is empty.                  ")
+            print("grapcut_mask is empty.")
 
     def update_photo(self, i):
         path = os.path.join(self.srcfolderpath, self.sourcelist[i])
