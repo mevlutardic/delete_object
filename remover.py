@@ -6,23 +6,24 @@ from skimage.restoration import inpaint
 
 
 class GrabCut(threading.Thread):
-    def __init__(self, windowName, filepath, kSize):
+    def __init__(self, windowName, srcfolderpath, dstfolderpath,kSize):
         threading.Thread.__init__(self)
 
         self.windowName = windowName
-        self.filepath = filepath
+        self.srcfolderpath = srcfolderpath
+        self.dstfolderpath = dstfolderpath
         self.kSize = kSize
+        
         self.i = 0
-        self.sourcelist = os.listdir(self.filepath)
+        self.sourcelist = os.listdir(self.srcfolderpath)
         self.informations()
         cv2.namedWindow(self.windowName, cv2.WINDOW_AUTOSIZE)
-        cv2.namedWindow('output', cv2.WINDOW_AUTOSIZE)
 
         cv2.setMouseCallback(self.windowName, self.drawing_process)
 
         self.mode = False
 
-        path = os.path.join(self.filepath, self.sourcelist[self.i])
+        path = os.path.join(self.srcfolderpath, self.sourcelist[self.i])
         self.image = cv2.imread(path, cv2.IMREAD_UNCHANGED)
 
         self.resize_orj_img = cv2.resize(self.image, (int(self.image.shape[1] * self.kSize), int(self.image.shape[0] * self.kSize)))
@@ -59,8 +60,11 @@ class GrabCut(threading.Thread):
         self.thickness = 3
 
         self.draw_circle = False
-
+        self.current_image = None
         self.img = None
+        self.finaldst =None
+        
+        self.update_photo(0)
         
     def informations(self):
         print("""
@@ -88,12 +92,10 @@ class GrabCut(threading.Thread):
             if not self.mode and not self.draw_circle:
                 cv2.imshow(self.windowName, self.image_new)
 
-            cv2.imshow('output', self.output)
-
             code = cv2.waitKey(1)
 
             if code == ord("q"):  # Press 'q' to exit the loop
-                print(f'\r --- Exiting the program...\n\n                                   ', end='', flush=True)
+                print(f'\r --- Exiting the program...                                      /n', end='', flush=True)
                 break
             elif code == ord("n"):  # Press 'n' to go to the next photo
                 if self.i < len(self.sourcelist) - 1:
@@ -105,6 +107,9 @@ class GrabCut(threading.Thread):
                     self.i -= 1
                     self.update_photo(self.i)
                     print(f'\r --- Moving to the previous photo...                          ', end='', flush=True)
+            elif code == ord("s"): # Press 's' save the current photo
+                dstpath = self.dstfolderpath+"/"+self.current_image
+                cv2.imwrite(dstpath,self.finaldst*255)
             elif code == ord("m"):  # Press 'm' to toggle mode (e.g., exit drawing mode)
                 self.mode = not self.mode
                 self.draw_circle = False
@@ -118,12 +123,9 @@ class GrabCut(threading.Thread):
             elif code == ord("r"):  # Press 'r' to remove parts of the image
                 kernel = np.ones((5,5), np.uint8)
                 self.grapcut_mask = cv2.dilate(self.grapcut_mask, kernel, iterations=1)
-                dst = cv2.inpaint(self.image_new, self.grapcut_mask, 3, cv2.INPAINT_NS)
-                filled_image = inpaint.inpaint_biharmonic(self.image_new, self.grapcut_mask, split_into_regions=True, channel_axis=-1)
-                filled_image2 = inpaint.inpaint_biharmonic(dst, self.grapcut_mask, split_into_regions=True, channel_axis=-1)
-                cv2.imshow("out", dst)
-                cv2.imshow("filled_image", filled_image)
-                cv2.imshow("filled_image2", filled_image2)
+                filled_image = cv2.inpaint(self.image_new, self.grapcut_mask, 2, cv2.INPAINT_NS)
+                self.finaldst = inpaint.inpaint_biharmonic(filled_image, self.grapcut_mask, split_into_regions=False, channel_axis=-1)      
+                cv2.imshow("filled_image2", self.finaldst )
                 print(f'\r -- Removing parts of the image and displaying results... ', end='', flush=True)
             elif code == ord('0'):  # Press '0' for background (BG) drawing
                 self.value = self.DRAW_BG 
@@ -146,25 +148,30 @@ class GrabCut(threading.Thread):
             bgdmodel = np.zeros((1, 65), np.float64)
             fgdmodel = np.zeros((1, 65), np.float64)
             self.img = cv2.cvtColor(self.image_new, cv2.COLOR_RGBA2RGB)
-            cv2.grabCut(self.img, self.mask, self.rect, bgdmodel, fgdmodel, 7, cv2.GC_INIT_WITH_RECT)
+            cv2.grabCut(self.img, self.mask, self.rect, bgdmodel, fgdmodel, 4, cv2.GC_INIT_WITH_RECT)
             self.rect_or_mask = 1
         elif self.rect_or_mask == 1:  # grabcut with mask
             bgdmodel = np.zeros((1, 65), np.float64)
             fgdmodel = np.zeros((1, 65), np.float64)
             self.img = cv2.cvtColor(self.image_new, cv2.COLOR_RGBA2RGB)
-            cv2.grabCut(self.img, self.mask, self.rect, bgdmodel, fgdmodel, 7, cv2.GC_INIT_WITH_MASK)
+            cv2.grabCut(self.img, self.mask, self.rect, bgdmodel, fgdmodel, 4, cv2.GC_INIT_WITH_MASK)
         
         self.grapcut_mask = np.where((self.mask == 1) + (self.mask == 3), 255, 0).astype('uint8')
         
         if np.any(self.grapcut_mask): 
-            
+            overlay = self.image_drawing.copy()
             self.output = cv2.bitwise_and(self.img, self.img, mask=self.grapcut_mask)
-           
+            contours, hierarchy = cv2.findContours( cv2.cvtColor(self.output, cv2.COLOR_BGR2GRAY), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+            cv2.drawContours(self.image_drawing, contours, -1, (255, 0, 205), -1)
+            alpha = 0.6
+            self.image_drawing = cv2.addWeighted(overlay, alpha, self.image_drawing, 1 - alpha, 0) 
+            cv2.imshow(self.windowName, self.image_drawing)
         else:
-            print("grapcut_mask is empty.")
+            print(f"\r -- Grapcut_mask is empty.                  ")
 
     def update_photo(self, i):
-        path = os.path.join(self.filepath, self.sourcelist[i])
+        path = os.path.join(self.srcfolderpath, self.sourcelist[i])
+        self.current_image = self.sourcelist[i]
         self.image = cv2.imread(path, cv2.IMREAD_UNCHANGED)
         self.image = cv2.resize(self.image, (int(self.image.shape[1] * self.kSize), int(self.image.shape[0] * self.kSize)))
         self.image_new = self.image.copy()
@@ -178,16 +185,16 @@ class GrabCut(threading.Thread):
                 self.start_point_rect = (x, y)
             elif event == cv2.EVENT_MOUSEMOVE:
                 if self.rectangle:
-                    self.imaga_drawing = self.image_new.copy()
+                    self.image_drawing = self.image_new.copy()
                     ix = self.start_point_rect[0]
                     iy = self.start_point_rect[1]
-                    overlay = self.imaga_drawing.copy() 
-                    cv2.rectangle(self.imaga_drawing, (ix, iy), (x, y), self.BLUE, 3)
+                    overlay = self.image_drawing.copy() 
+                    cv2.rectangle(self.image_drawing, (ix, iy), (x, y), self.BLUE, 3)
                     alpha = 0.6
-                    self.imaga_drawing = cv2.addWeighted(overlay, alpha, self.imaga_drawing, 1 - alpha, 0) 
+                    self.image_drawing = cv2.addWeighted(overlay, alpha, self.image_drawing, 1 - alpha, 0) 
                     self.rect = (min(ix, x), min(iy, y), abs(ix - x), abs(iy - y))
                     self.rect_or_mask = 0
-                    cv2.imshow(self.windowName, self.imaga_drawing)
+                    cv2.imshow(self.windowName, self.image_drawing)
             elif event == cv2.EVENT_LBUTTONUP:
                 self.rectangle = False
                 self.rect_over = True
@@ -199,21 +206,31 @@ class GrabCut(threading.Thread):
         elif self.rect_over and self.draw_circle:
             if event == cv2.EVENT_LBUTTONDOWN:
                 self.drawing = True
-                cv2.circle(self.imaga_drawing, (x, y), self.thickness, self.value['color'], -1)
+                cv2.circle(self.image_drawing, (x, y), self.thickness, self.value['color'], -1)
                 cv2.circle(self.mask, (x, y), self.thickness, self.value['val'], -1)
             elif event == cv2.EVENT_MOUSEMOVE:
                 if self.drawing:
-                    cv2.circle(self.imaga_drawing, (x, y), self.thickness, self.value['color'], -1)
+                    overlay = self.image_drawing.copy()
+                    cv2.circle(self.image_drawing, (x, y), self.thickness, self.value['color'], -1)
                     cv2.circle(self.mask, (x, y), self.thickness, self.value['val'], -1)
-                    cv2.imshow(self.windowName, self.imaga_drawing)
+                    alpha = 0.8
+                    self.image_drawing = cv2.addWeighted(overlay, alpha, self.image_drawing, 1 - alpha, 0) 
+                    cv2.imshow(self.windowName, self.image_drawing)
             elif event == cv2.EVENT_LBUTTONUP:
                 if self.drawing:
                     self.drawing = False
-                    cv2.circle(self.imaga_drawing, (x, y), self.thickness, self.value['color'], -1)
+                    overlay = self.image_drawing.copy()
+                    cv2.circle(self.image_drawing, (x, y), self.thickness, self.value['color'], -1)
                     cv2.circle(self.mask, (x, y), self.thickness, self.value['val'], -1)
+                    alpha = 0.8
+                    self.image_drawing = cv2.addWeighted(overlay, alpha, self.image_drawing, 1 - alpha, 0) 
+                    cv2.imshow(self.windowName, self.image_drawing)
+                   
 
 if __name__ == '__main__':
-    photo_path = "/home/mard/Desktop/grabcut/images/"
+    src_image_folder = "/home/mard/Desktop/grabcut/images/"
+    dst_image_folder = "/home/mard/Desktop/delete_object/results"
+    
     kSize = 1.1
-    thread = GrabCut("Window", photo_path, kSize)
+    thread = GrabCut("Window", src_image_folder,dst_image_folder, kSize)
     thread.run()
