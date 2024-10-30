@@ -157,6 +157,7 @@ class GrabCut(threading.Thread):
             cv2.grabCut(self.img, self.mask, self.rect, bgdmodel, fgdmodel, 4, cv2.GC_INIT_WITH_MASK)
         
         self.grapcut_mask = np.where((self.mask == 1) + (self.mask == 3), 255, 0).astype('uint8')
+        cv2.imshow("mask2", self.grapcut_mask)
         
         if np.any(self.grapcut_mask): 
             overlay = self.image_drawing.copy()
@@ -228,8 +229,8 @@ class GrabCut(threading.Thread):
                    
 
 if __name__ == '__main__':
-    src_image_folder = "/home/mard/Desktop/grabcut/images/"
-    dst_image_folder = "/home/mard/Desktop/delete_object/results"
+    src_image_folder = "./images"
+    dst_image_folder = "./results"
     
     kSize = 1.1
     thread = GrabCut("Window", src_image_folder,dst_image_folder, kSize)
