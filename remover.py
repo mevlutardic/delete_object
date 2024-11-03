@@ -148,13 +148,13 @@ class GrabCut(threading.Thread):
             bgdmodel = np.zeros((1, 65), np.float64)
             fgdmodel = np.zeros((1, 65), np.float64)
             self.img = cv2.cvtColor(self.image_new, cv2.COLOR_RGBA2RGB)
-            cv2.grabCut(self.img, self.mask, self.rect, bgdmodel, fgdmodel, 4, cv2.GC_INIT_WITH_RECT)
+            cv2.grabCut(self.img, self.mask, self.rect, bgdmodel, fgdmodel, 3, cv2.GC_INIT_WITH_RECT)
             self.rect_or_mask = 1
         elif self.rect_or_mask == 1:  # grabcut with mask
             bgdmodel = np.zeros((1, 65), np.float64)
             fgdmodel = np.zeros((1, 65), np.float64)
             self.img = cv2.cvtColor(self.image_new, cv2.COLOR_RGBA2RGB)
-            cv2.grabCut(self.img, self.mask, self.rect, bgdmodel, fgdmodel, 4, cv2.GC_INIT_WITH_MASK)
+            cv2.grabCut(self.img, self.mask, self.rect, bgdmodel, fgdmodel, 3, cv2.GC_INIT_WITH_MASK)
         
         self.grapcut_mask = np.where((self.mask == 1) + (self.mask == 3), 255, 0).astype('uint8')
         cv2.imshow("mask2", self.grapcut_mask)
@@ -167,6 +167,7 @@ class GrabCut(threading.Thread):
             alpha = 0.6
             self.image_drawing = cv2.addWeighted(overlay, alpha, self.image_drawing, 1 - alpha, 0) 
             cv2.imshow(self.windowName, self.image_drawing)
+            self.image_drawing = self.img.copy()
         else:
             print("grapcut_mask is empty.")
 
